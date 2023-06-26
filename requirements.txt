@@ -1,6 +1,0 @@
-matplotlib==3.7.1
-numpy==1.24.1
-pandas==2.0.2
-spacy==3.5.3
-torch==2.0.1+cu117
-torchvision==0.15.2+cu117
