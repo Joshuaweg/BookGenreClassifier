@@ -101,8 +101,14 @@ with torch.no_grad():
         images = images.reshape(-1,28*28).to(device)
         labels1 = labels1.to(device)
         outputs = model(images)
-
-        _, predictions = torch.max(outputs, 1)
+        max_pos = 0
+        max_val = 0
+        for o in outputs:
+            if(max_pos == 0):
+                max_val=o
+            if o>max_val:
+                max_pos =+1
+        outputs = []
 
         n_samples += labels1.shape[0]
         n_correct += (predictions == labels1).sum().item()
