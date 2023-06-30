@@ -1,255 +1,215 @@
-from re import I
-
-from pandas.core.missing import clean_fill_method
+import pandas as pd
 import torch
 import numpy as np
 import torch.nn as nn
-import torchvision
-import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import spacy
-import numpy as np
-import pandas as pd
-import sys
 from sklearn.model_selection import train_test_split
+import nltk
 
-def n_grams(doc, n):
-    return [doc[i:i+n] for i in range(len(doc)-n+1)]
-def Union(lst1, lst2):
-    final_list = list(set(lst1) | set(lst2))
-    return final_list
-def NgramUnions(lst1, lst2):
-    l3 = lst1+lst2
-    final_list = [list(x) for x in set(tuple(x) for x in l3)]
-    return final_list
+factor1 = 200
+neuron1 = 8000
+neuron2 = 4000
 
-data = pd.read_csv("data\\genre_data.csv")
-target_category=[]
-#print(data[["Title","Author","Description","Genres1"]].head())
-#print(len(data), "Books")
+url = 'https://raw.githubusercontent.com/Joshuaweg/BookGenreClassifier/master/data/genre_data.csv'
+db_original = pd.read_csv(url)
+# Dataset is now stored in a Pandas Dataframe
 
-genres = []
-count_genre = {}
+# List of database headers
+db_original_headers = db_original.columns.values.tolist()
 
-#for g in data["Genres1"].values:
-#    if not g in genres:
-#        genres.append(g)
-#        count_genre[g] = 0
-#        #print(g)
-#    count_genre[g]+=1
-##print(genres)
-##print(len(genres))
-#sorted_count_genre = sorted(count_genre.items(), key=lambda x:x[1])
-#mean = 0.0
-#sum = 0.0
-#for g in sorted_count_genre:
-#    sum += g[1]
-#mean = sum/len(genres)
-#variance = 0.0
-#for g in sorted_count_genre:
-#    variance += (g[1]-mean)**2
-#variance = variance/(len(genres))
-#stdev = variance**.5
-##print(mean)
-##print(stdev)
-##print(variance)
-#sorted_count_genre = [g for g in sorted_count_genre if g[1]>=mean]
+db = db_original[["Title","Author","Description", "Genres1"]]
 
-##print(sorted_count_genre)
-##print(len(sorted_count_genre))
-#sum = 0
-#target_category = []
-#for g in sorted_count_genre:
-#    target_category.append(g[0])
-#print(target_category)
-#cleaned_data = data[data["Genres1"].isin(target_category)]
-cleaned_data=data[["Title","Author","Description","Genres1"]]
-cleaned_data = cleaned_data[cleaned_data.Genres1.isin(['Fiction','Nonfiction'])]
-#cleaned_data = cleaned_data[:660]
-target_category=['Fiction','Nonfiction']
-print(len(cleaned_data))
-#cleaned_data=cleaned_data[:200]
-#Description Vectorization
-nlp_data=[]
-dataByClass={}
-nlp = spacy.load('en_core_web_lg')
-all_stopwords = nlp.Defaults.stop_words
-tok_list = []
-tok_pos = []
-word2vec = {}
-vec2word = {}
-genre2vec ={}
-vec2genre = {}
-sharedWords = []
-#intersect_tokens =[]
-for c in target_category:
-    dataByClass[c]=[]
-for index,row in cleaned_data.iterrows():
-    title =row["Title"]
-    author = row["Author"]
-    description=row["Description"]
-    tokens = nlp(description.lower())
-    t_title = nlp(title.lower())
-    t_author= nlp(author.lower())
-    #print("Description Length: ",len(description))
-    nsw_tokens = [token.lemma_ for token in tokens if not token.text in all_stopwords]
-    #print("Description without stop words: ",len(nsw_tokens))
-    nsw_tokens = [token for token in nsw_tokens if not token in t_title.text]
-    #print("Description without title: ",len(nsw_tokens))
-    nsw_tokens = [token for token in nsw_tokens if not (token in t_author.text)]
-    #nsw_tokens = [token for token in nsw_tokens if len(token) >= 7]
-    #print("Description without Author Name: ",len(nsw_tokens))
+db_fic_nonfic = db[db.Genres1.isin(["Fiction", "Nonfiction"])]
 
-    tok_list = Union(tok_list,nsw_tokens)
-    dataByClass[row.Genres1]=Union( dataByClass[row.Genres1],nsw_tokens)
-    if(index%1000==0):
-        print(index,"Titles processed")
-print(len(tok_list))
-print(len(dataByClass["Fiction"]))
-print(len(dataByClass["Nonfiction"]))
-sharedWords=[tok for tok in dataByClass["Fiction"] if tok  in dataByClass["Nonfiction"]]
-i = 0
-for t in tok_list:
-    tok_pos.append(i)
-    word2vec[t]=i 
-    vec2word[i]=t
-    i+=1
-i=0
-for g in target_category:
-    genre2vec[g]=i 
-    vec2genre[i]=g
-    i+=1
-#device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = torch.device('cpu')
+target_category=["Fiction", "Nonfiction"]
 
-#hyperparameters
-x_train, x_test, y_train, y_test =train_test_split(cleaned_data[["Title","Author","Description"]],cleaned_data["Genres1"],test_size=.2,random_state=42)
-#print(x_train)
-input_size = len(tok_list) #number of tokens in corpus
-hidden_size =  40
-hidden_size2 = 4
-num_classes = len(target_category) #number of distinct genres
-num_epoch = 2
+db_headers = db_fic_nonfic.columns.values.tolist()
 
-batch_size = 1
+# Altering database to contain lowercase characters
+db_fic_nonfic = db_fic_nonfic.apply(lambda x: x.astype(str).str.lower())
 
-learning_rate = 0.005
+# Removing Title from within Description
+db_fic_nonfic['Description'] = db_fic_nonfic.apply(lambda row: row['Description'].replace(str(row['Title']), ''), axis=1)
+#db_fic_nonfic['Description2'] == db_fic_nonfic['Description']
 
-#Dataset
-#will add code to read in dataset here
+# Removing Author from within Description
+db_fic_nonfic['Description'] = db_fic_nonfic.apply(lambda row: row['Description'].replace(str(row['Author']), ''), axis=1)
 
-#two hidden layer NeuralNet
-class NeuralNet(nn.Module):
-    def __init__(self, input_size,hidden_size,hidden_size2,num_classes):
-        super(NeuralNet, self).__init__()
-        #hidden layer 1
-        self.l1 = nn.Linear(input_size,hidden_size)
-        #hidden layer 2
-        self.l2 = nn.Linear(hidden_size,hidden_size2)
-        #activation function
-        self.activation = nn.ReLU()
-        # output layer
-        self.l3 = nn.Linear(hidden_size2,num_classes)
-    def forward(self, x):
-        out = self.l1(x) #input -> hidden
-        out = self.activation(out) #activation on hidden
-        out=self.l2(out)
-        out=self.activation(out)
-        out = self.l3(out) # hidden -> output
-        return out
+# Removing following text from column
+db_fic_nonfic['Description'] = db_fic_nonfic.apply(lambda row: row['Description'].replace('new york times', ''), axis=1)
+db_fic_nonfic['Description'] = db_fic_nonfic.apply(lambda row: row['Description'].replace('bestselling', ''), axis=1)
+db_fic_nonfic['Description'] = db_fic_nonfic.apply(lambda row: row['Description'].replace('author', ''), axis=1)
+db_fic_nonfic['Description'] = db_fic_nonfic.apply(lambda row: row['Description'].replace('book year', ''), axis=1)
 
-model = NeuralNet(input_size,hidden_size,hidden_size2,num_classes)
-model = model.to(device)
-# loss optimizer
-criterion =nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate)
 
-#training loop will need to add
-train = cleaned_data[:2127]
-test =cleaned_data[2127:]
-for epoch in range(num_epoch):
-    ite = 0
-    for row in x_train.values:
-        title =row[0]
-        author = row[1]
-        description=row[2]
-        tokens = nlp(description.lower())
-        t_title = nlp(title.lower())
-        t_author= nlp(author.lower())
-        #print("Description Length: ",len(description))
-        nsw_tokens = [token.lemma_ for token in tokens if not token.text in all_stopwords]
-        #print("Description without stop words: ",len(nsw_tokens))
-        nsw_tokens = [token for token in nsw_tokens if not token in t_title.text]
-        #print("Description without title: ",len(nsw_tokens))
-        nsw_tokens = [token for token in nsw_tokens if not token in t_author.text]
-        nsw_tokens = [token for token in nsw_tokens if len(token) >= 7]
-        nsw_tokens = [token for token in nsw_tokens if not (token in sharedWords)]
-       #print("Description without Author Name: ",len(nsw_tokens))
-        in_layer = torch.zeros(input_size,dtype=torch.float32)
-        label = torch.zeros(num_classes,dtype=torch.float32).to(device)
-        for token in nsw_tokens:
-            ind = word2vec[token]
-            if not( in_layer[ind] == 1.0):
-                in_layer[ind] = 1.0;
-        in_layer=in_layer.to(device)
-        label[genre2vec[y_train.values[ite]]] = 1.0
-        outputs = model(in_layer)
-        loss = criterion(outputs,label)
-    
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        if((ite+1)%100==0):
-            print(f'epoch {epoch+1}, step {ite+1}, loss={loss.item():.4f}')
-        ite+=1
-with torch.no_grad():
-    n_correct = 0
-    n_samples = 0
-    ite = 0
-    for row in x_test.values:
-       
-        title =row[0]
-        author = row[1]
-        description=row[2]
-        tokens = nlp(description.lower())
-        t_title = nlp(title.lower())
-        t_author= nlp(author.lower())
-        #print("Description Length: ",len(description))
-        nsw_tokens = [token.lemma_ for token in tokens if not token.text in all_stopwords]
-        #print("Description without stop words: ",len(nsw_tokens))
-        nsw_tokens = [token for token in nsw_tokens if not token in t_title.text]
-        #print("Description without title: ",len(nsw_tokens))
-        nsw_tokens = [token for token in nsw_tokens if not token in t_author.text]
-        nsw_tokens = [token for token in nsw_tokens if len(token) >= 7]
-        nsw_tokens = [token for token in nsw_tokens if not (token in sharedWords)]
-       #print("Description without Author Name: ",len(nsw_tokens))
-        in_layer = torch.zeros(input_size,dtype=torch.float32)
-        label = torch.zeros(num_classes,dtype=torch.float32).to(device)
-        for token in nsw_tokens:
-            ind = word2vec[token]
-            if not( in_layer[ind] == 1.0):
-                in_layer[ind] = 1.0;
-        in_layer=in_layer.to(device)
-        label[genre2vec[y_test.values[ite]]] = 1.0
-       # print(label)
-        outputs = model(in_layer)
-        max_pos = 0;
-        max_val = -2;
-        for o in outputs:
-            if max_pos == 0:
-                max_val = o;
-            if o>max_val:
-                max_pos = o
-        prediction = torch.zeros(num_classes,dtype=torch.float32)
-        prediction[max_pos]=1.0
-        n_samples += 1
-        #print(prediction)
-        if torch.equal(prediction,label):
-            n_correct += 1
-        ite+=1
-        
-        
-   
+# Dropping columns Title and Author
+db_fic_nonfic = db_fic_nonfic.drop(columns=['Title', 'Author'])
 
-acc = 100.0* (n_correct/n_samples)
-print(f'accuracy = {acc}')
+# Removing numerical values from Description column
+db_fic_nonfic['Description'] = db_fic_nonfic['Description'].str.replace('\d+', '', regex=True)
+# Removign punctuations
+import re
+db_fic_nonfic['Description']=[re.sub('[^\w\s]+', '', s) for s in db_fic_nonfic['Description'].tolist()]
+
+import nltk
+from nltk.corpus import stopwords
+stopword_package = 'stopwords'
+
+nltk.download('stopwords')
+stop = stopwords.words("english")
+# Removing stopwords from Descriptions
+db_fic_nonfic.Description = db_fic_nonfic.Description.apply(lambda x: ' '.join([word for word in x.split() if word not in (stop)]))
+
+
+# Remove proper names ????
+
+from nltk.stem import WordNetLemmatizer
+nltk.download('wordnet')
+lemmatizer = WordNetLemmatizer()
+def lemmatize_words(text):
+  words = text.split()
+  words = [lemmatizer.lemmatize(word, pos='v') for word in words]
+  return ' '.join(words)
+db_fic_nonfic['Description'] = db_fic_nonfic.Description.apply(lemmatize_words)
+
+from nltk.stem.snowball import SnowballStemmer
+stemmer = SnowballStemmer('english') # check if stopwords are removed
+#db_fic_nonfic['Description'] = db_fic_nonfic['Description'].apply(lambda x: [stemmer.stem(y) for y in x])
+db_fic_nonfic['Description'].apply(lambda x: stemmer.stem(x))
+
+from nltk.util import ngrams
+
+from sklearn.feature_extraction.text import CountVectorizer
+model = CountVectorizer(ngram_range=(1, 5),
+                        max_features=factor1,
+                        stop_words='english')
+matrix = model.fit_transform(db_fic_nonfic['Description']).toarray()
+df_output = pd.DataFrame(data=matrix, columns=model.vocabulary_.keys())
+features_tensor = torch.tensor(df_output.values).to(torch.float32)
+
+# Convert to tensors and split into train and test sets
+from sklearn.model_selection import train_test_split
+from sklearn import preprocessing
+# Using target_category as labels [Fiction, Nonfiction]
+le = preprocessing.LabelEncoder()
+
+labels = le.fit_transform(db_fic_nonfic.Genres1)
+labels_tensor = torch.as_tensor(labels).to(torch.float32)
+labels_tensor.shape
+
+features_tensor_train, features_tensor_test, labels_tensor_train, labels_tensor_test = train_test_split(features_tensor.unsqueeze(dim=1),
+                                                                                                        labels_tensor,
+                                                                                                        test_size=0.3,
+                                                                                                        random_state=85)
+
+# Setup device agnostic code
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device
+
+# Model class that subclasses nn.Module
+class Cateogrizer(nn.Module):
+  def __init__(self):
+    super().__init__()
+    # Creating nn.Linear layers capable of handling features_tensor and labels_tensor
+    #self.layer_1 = nn.Linear(in_features=2, out_features=800)
+    #self.layer_2 = nn.Linear(in_features=800, out_features=2)
+    self.layer_1 = nn.Sequential(
+        nn.Linear(in_features=factor1, out_features=neuron1),
+        #nn.ReLU(inplace=True), #inplace (bool) – can optionally do the operation in-place. Default: False
+        nn.ReLU(),
+       #nn.Linear(in_features=8000, out_features=neuron2),
+        #nn.ReLU(),
+        nn.Linear(in_features=neuron1, out_features=1)
+    )
+
+
+    # Forward method containing the forward pass computation
+  def forward(self, x):
+    # Return the output of layer_2, a single feature, the same shape as y
+    return self.layer_1(x)
+
+model_0 = Cateogrizer().to(device)
+model_0
+
+# Make predictions with the model
+untrained_preds = model_0(features_tensor_test.to(device))
+print(f"Length of predictions: {len(untrained_preds)}, Shape: {untrained_preds.shape}")
+print(f"Length of test samples: {len(labels_tensor_test)}, Shape: {labels_tensor_test.shape}")
+print(f"\nFirst 10 predictions:\n{untrained_preds[:10]}")
+print(f"\nFirst 10 test labels:\n{labels_tensor_test[:10]}")
+
+# Create a loss function
+loss_fn = nn.BCEWithLogitsLoss()
+
+# Create optimizer
+optimizer = torch.optim.SGD(params=model_0.parameters(),
+                            lr=0.03)
+
+# Calculate accuracy (a classification metric)
+def accuracy_fn(y_true, y_pred):
+    correct = torch.eq(y_true, y_pred).sum().item() # torch.eq() calculates where two tensors are equal
+    acc = (correct / len(y_pred)) * 100
+    return acc
+
+# View the frist 5 outputs of the forward pass on the test data
+labels_logits = model_0(features_tensor_test.to(device))[:5]
+
+labels_pred_probs = torch.relu(labels_logits)
+
+labels_preds = torch.round(labels_pred_probs)
+
+labels_pred_labels = torch.round(torch.relu(model_0(features_tensor_test.to(device))[:5]))
+print(torch.eq(labels_preds.squeeze(), labels_pred_labels.squeeze()))
+
+from scipy import optimize
+# Building a training and testing loop
+torch.manual_seed(85)
+
+# Number of epochs
+epochs = 100
+
+# Data inserted into target device
+features_tensor_train, labels_tensor_train = features_tensor_train.to(device), labels_tensor_train.to(device)
+features_tensor_test, labels_tensor_test = features_tensor_test.to(device), labels_tensor_test.to(device)
+
+# Building training and evaluation loop
+for epoch in range(epochs):
+  # Training
+  model_0.train()
+
+  # Forward pass (model outputs raw logits)
+  labels_logits = model_0(features_tensor_train).squeeze()
+  labels_pred = torch.round(torch.relu(labels_logits))
+
+  # Calculate loss/accuracy
+  loss = loss_fn(labels_logits,
+                 labels_tensor_train)
+  acc = accuracy_fn(y_true=labels_tensor_train,
+                    y_pred=labels_pred)
+
+  # Optimizer zero grad
+  optimizer.zero_grad()
+
+  # Loss backwards
+  loss.backward()
+
+  # Optimizer step
+  optimizer.step()
+
+  # Testing
+  model_0.eval()
+  with torch.inference_mode():
+    # Forward pass
+    test_logits = model_0(features_tensor_test).squeeze()
+    test_pred = torch.round(torch.sigmoid(test_logits))
+    # Calculate loss/accuracy
+    test_loss = loss_fn(test_logits,
+                        labels_tensor_test)
+    test_acc = accuracy_fn(y_true=labels_tensor_test,
+                           y_pred=test_pred)
+
+    # Printing whats happening in batches
+    if epoch % 10 == 0:
+      print(f"Epoch: {epoch} | Loss: {loss:.5f}, Accuracy: {acc:.2f}% | Test loss: {test_loss:.5f}, Test acc: {test_acc:.2f}%")
+
