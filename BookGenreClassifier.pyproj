@@ -26,6 +26,7 @@
     <Compile Include="example.py" />
     <Compile Include="notes.py" />
     <Compile Include="processing.py" />
+    <Compile Include="tf.py" />
   </ItemGroup>
   <ItemGroup>
     <Interpreter Include="env\">

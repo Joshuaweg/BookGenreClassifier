@@ -20,12 +20,12 @@ num_epoch = 8
 
 batch_size = 100
 
-learning_rate = 0.004
+learning_rate = 0.002
 
 #MNIST
 train_dataset = torchvision.datasets.MNIST(root='./data',train=True, transform=transforms.ToTensor(), download=True)
 test_dataset = torchvision.datasets.MNIST(root='./data',train=False, transform=transforms.ToTensor())
-
+print(len(train_dataset))
 train_loader = torch.utils.data.DataLoader(dataset=train_dataset,batch_size=batch_size,shuffle=True)
 test_loader = torch.utils.data.DataLoader(dataset=test_dataset,batch_size=batch_size,shuffle=False)
 
@@ -101,15 +101,8 @@ with torch.no_grad():
         images = images.reshape(-1,28*28).to(device)
         labels1 = labels1.to(device)
         outputs = model(images)
-        max_pos = 0
-        max_val = 0
-        for o in outputs:
-            if(max_pos == 0):
-                max_val=o
-            if o>max_val:
-                max_pos =+1
-        outputs = []
 
+        _, predictions = torch.max(outputs, 1)
         n_samples += labels1.shape[0]
         n_correct += (predictions == labels1).sum().item()
         class_predictions = [F.softmax(output,dim=0) for output in outputs]
