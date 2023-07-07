@@ -128,13 +128,18 @@ for index,row in cleaned_data.iterrows():
         tok_list = Union(tok_list,nsw_tokens)
         dataByClass[row.Genres1]=Union( dataByClass[row.Genres1],nsw_tokens)
         if(index%1000==0):
+
             print(index,"Titles processed")
 #print(len(tok_list))
 #print(len(dataByClass["Fiction"]))
 #print(len(dataByClass["Nonfiction"]))
 sharedWords=[tok for tok in dataByClass["Fiction"] if tok  in dataByClass["Nonfiction"]]
+i = 0
 for doc in docs:
+    i += 1
     doc = [tok.text for tok in nlp(doc) if not tok.text in sharedWords]
+    if (i%100==0):
+        print(doc)
 t_vectors=tfidf.fit_transform(docs)
 t_vectors = torch.tensor(t_vectors.toarray(),dtype=torch.float32)
 print(t_vectors.shape)
@@ -223,11 +228,12 @@ class Texts(Dataset):
         y = self.labels[index]
 
         return X, y
+  
+
 model = NeuralNet(input_size,hidden_size,hidden_size2,num_classes)
 model = model.to(device)
+# Global Pruning 
 parameters = ((model.l1, "weight"), (model.l2, "weight"))
-#module = model.l1
-
 prune.global_unstructured(parameters, pruning_method=prune.L1Unstructured, amount=3)
 ds = Texts(x_train,y_train, transform=transforms.ToTensor())
 test_ds =Texts(x_test,y_test, transform=transforms.ToTensor())
