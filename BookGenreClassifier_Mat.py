@@ -9,13 +9,17 @@ from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 import spacy
 import pandas as pd
+import sys
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
+from sklearn.decomposition import TruncatedSVD
+import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 import os
 import shutil
-from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay, f1_score
+import torch.nn.functional as F
 from sklearn.naive_bayes import MultinomialNB
+from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay, f1_score
 from sklearn.naive_bayes import GaussianNB
 
 # Get directory name
@@ -37,12 +41,13 @@ def NgramUnions(lst1, lst2):
 
 data = pd.read_csv('https://raw.githubusercontent.com/Joshuaweg/BookGenreClassifier/master/data/genre_data.csv')
 target_category=[]
+
 genres = []
 count_genre = {}
 
 cleaned_data=data[["Title","Author","Description","Genres1"]]
 cleaned_data = cleaned_data[cleaned_data.Genres1.isin(['Fiction','Nonfiction'])]
-
+#cleaned_data = cleaned_data[:660]
 target_category=['Fiction','Nonfiction']
 print(len(cleaned_data))
 #cleaned_data=cleaned_data[:200]
@@ -109,16 +114,16 @@ for g in y:
         y_set[l]=1
     l+=1
 
-t_vectors = tfidf.fit_transform(docs)
-t_vectors = torch.tensor(t_vectors.toarray(), dtype=torch.float32)
+t_vectors=tfidf.fit_transform(docs)
+t_vectors = torch.tensor(t_vectors.toarray(),dtype=torch.float32)
 
-# hyperparameters
-x_train, x_test, y_train, y_test = train_test_split(t_vectors, y_set, test_size=.2, random_state=42)
+#hyperparameters
+x_train, x_test, y_train, y_test =train_test_split(t_vectors,y_set,test_size=.2,random_state=42)
 
-input_size = len(t_vectors[0])  # number of tokens in corpus
-hidden_size = 32
+input_size = len(t_vectors[0]) #number of tokens in corpus
+hidden_size =  32
 hidden_size2 = 8
-num_classes = len(target_category)  # number of distinct genres
+num_classes = len(target_category) #number of distinct genres
 num_epoch = 4
 
 batch_size = 2
@@ -131,9 +136,8 @@ f1MNB = f1_score(predictedMNB, y_test, average="weighted")
 cmatrixMNB = confusion_matrix(y_test, predictedMNB)
 
 print(f"MultinomialNB Accuracy Score: {accMNB}")
-print(f"MultinomialNB F1-Score: {f1MNB}")
-print(f"MultinomialNB Confusion Matrix Score: {cmatrixMNB}")
-
+print(f"MultinomialNB f1_score: {f1MNB}")
+print(f"MultinomialNB confusion matrix: {cmatrixMNB}")
 
 gnb = GaussianNB()
 
@@ -144,11 +148,18 @@ f1GNB = f1_score(predictedGNB, y_test, average="weighted")
 cmatrixGNB = confusion_matrix(y_test, predictedGNB)
 
 print(f"GaussianNB Accuracy Score: {accuracyGNB}")
-print(f"GaussianNB F1-Score: {f1GNB}")
-print(f"GaussianNB Confusion Matrix Score: {cmatrixGNB}")
+print(f"GaussianNB f1_score: {f1GNB}")
+print(f"GaussianNB confusion matrix: {cmatrixGNB}")
 
-# F1 score can be interpreted as a measure of overall model performance
-# from 0 to 1, where 1 is the best. To be more specific, F1 score can be
+
+
+#F1 score can be interpreted as a measure of overall model performance
+#from 0 to 1, where 1 is the best. To be more specific, F1 score can be
 # interpreted as the model's balanced ability to both capture positive
-# cases (recall) and be accurate with the cases
-# it does capture (precision).
+#cases (recall) and be accurate with the cases
+#it does capture (precision).
+
+
+
+
+
