@@ -1,18 +1,34 @@
-from re import I
-
+import re
 from pandas.core.missing import clean_fill_method
 import torch
 import numpy as np
 import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
+from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 import spacy
-import numpy as np
 import pandas as pd
 import sys
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
+from sklearn.decomposition import TruncatedSVD
+import matplotlib.pyplot as plt
+from torch.utils.tensorboard import SummaryWriter
+import os
+import shutil
+import torch.nn.functional as F
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay, f1_score
+from sklearn.naive_bayes import GaussianNB
 
+# Get directory name
+if os.path.exists("runs/BGC"):
+    shutil.rmtree("runs/BGC")
+writer = SummaryWriter("runs/BGC")
+
+nb = MultinomialNB()
+tfidf = TfidfVectorizer()
 def n_grams(doc, n):
     return [doc[i:i+n] for i in range(len(doc)-n+1)]
 def Union(lst1, lst2):
@@ -23,46 +39,12 @@ def NgramUnions(lst1, lst2):
     final_list = [list(x) for x in set(tuple(x) for x in l3)]
     return final_list
 
-data = pd.read_csv("data\\genre_data.csv")
+data = pd.read_csv('https://raw.githubusercontent.com/Joshuaweg/BookGenreClassifier/master/data/genre_data.csv')
 target_category=[]
-#print(data[["Title","Author","Description","Genres1"]].head())
-#print(len(data), "Books")
 
 genres = []
 count_genre = {}
 
-#for g in data["Genres1"].values:
-#    if not g in genres:
-#        genres.append(g)
-#        count_genre[g] = 0
-#        #print(g)
-#    count_genre[g]+=1
-##print(genres)
-##print(len(genres))
-#sorted_count_genre = sorted(count_genre.items(), key=lambda x:x[1])
-#mean = 0.0
-#sum = 0.0
-#for g in sorted_count_genre:
-#    sum += g[1]
-#mean = sum/len(genres)
-#variance = 0.0
-#for g in sorted_count_genre:
-#    variance += (g[1]-mean)**2
-#variance = variance/(len(genres))
-#stdev = variance**.5
-##print(mean)
-##print(stdev)
-##print(variance)
-#sorted_count_genre = [g for g in sorted_count_genre if g[1]>=mean]
-
-##print(sorted_count_genre)
-##print(len(sorted_count_genre))
-#sum = 0
-#target_category = []
-#for g in sorted_count_genre:
-#    target_category.append(g[0])
-#print(target_category)
-#cleaned_data = data[data["Genres1"].isin(target_category)]
 cleaned_data=data[["Title","Author","Description","Genres1"]]
 cleaned_data = cleaned_data[cleaned_data.Genres1.isin(['Fiction','Nonfiction'])]
 #cleaned_data = cleaned_data[:660]
@@ -71,7 +53,10 @@ print(len(cleaned_data))
 #cleaned_data=cleaned_data[:200]
 #Description Vectorization
 nlp_data=[]
+docs =[]
 dataByClass={}
+import spacy.cli
+spacy.cli.download("en_core_web_lg")
 nlp = spacy.load('en_core_web_lg')
 all_stopwords = nlp.Defaults.stop_words
 tok_list = []
@@ -81,175 +66,100 @@ vec2word = {}
 genre2vec ={}
 vec2genre = {}
 sharedWords = []
-#intersect_tokens =[]
+y = []
+
 for c in target_category:
     dataByClass[c]=[]
+r = 0
 for index,row in cleaned_data.iterrows():
     title =row["Title"]
     author = row["Author"]
     description=row["Description"]
+    description =re.sub(r'[^a-zA-Z ]','',description)
+    gen = row["Genres1"]
     tokens = nlp(description.lower())
     t_title = nlp(title.lower())
     t_author= nlp(author.lower())
-    #print("Description Length: ",len(description))
-    nsw_tokens = [token.lemma_ for token in tokens if not token.text in all_stopwords]
-    #print("Description without stop words: ",len(nsw_tokens))
-    nsw_tokens = [token for token in nsw_tokens if not token in t_title.text]
-    #print("Description without title: ",len(nsw_tokens))
-    nsw_tokens = [token for token in nsw_tokens if not (token in t_author.text)]
-    #nsw_tokens = [token for token in nsw_tokens if len(token) >= 7]
-    #print("Description without Author Name: ",len(nsw_tokens))
+    if(len(tokens)<=500 and len(tokens)>110):
+        y.append(gen)
+        nsw_tokens = [token.lemma_ for token in tokens if not token.text in all_stopwords]
+        nsw_tokens = [token for token in nsw_tokens if not token in t_title.text]
+        nsw_tokens = [token for token in nsw_tokens if not (token in t_author.text)]
+        if r<10:
+            print(title,"\n",gen,"\n",description)
+        docs.append(" ".join(nsw_tokens))
+        if r<100:
+            writer.add_text(title," ".join(nsw_tokens)+"---"+gen)
+            r+=1
+        tok_list = Union(tok_list,nsw_tokens)
+        dataByClass[row.Genres1]=Union( dataByClass[row.Genres1],nsw_tokens)
+        if(index%1000==0):
+            print(index,"Titles processed")
 
-    tok_list = Union(tok_list,nsw_tokens)
-    dataByClass[row.Genres1]=Union( dataByClass[row.Genres1],nsw_tokens)
-    if(index%1000==0):
-        print(index,"Titles processed")
-print(len(tok_list))
-print(len(dataByClass["Fiction"]))
-print(len(dataByClass["Nonfiction"]))
 sharedWords=[tok for tok in dataByClass["Fiction"] if tok  in dataByClass["Nonfiction"]]
-i = 0
-for t in tok_list:
-    tok_pos.append(i)
-    word2vec[t]=i 
-    vec2word[i]=t
-    i+=1
+for doc in docs:
+    doc = [tok.text for tok in nlp(doc) if not tok.text in sharedWords]
+
 i=0
 for g in target_category:
-    genre2vec[g]=i 
+    genre2vec[g]=i
     vec2genre[i]=g
     i+=1
-#device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = torch.device('cpu')
+y_set =torch.zeros([len(y)],dtype=torch.long)
+l=0
+for g in y:
+    if g == "Fiction":
+        y_set[l]=0
+    else:
+        y_set[l]=1
+    l+=1
+
+t_vectors=tfidf.fit_transform(docs)
+t_vectors = torch.tensor(t_vectors.toarray(),dtype=torch.float32)
 
 #hyperparameters
-x_train, x_test, y_train, y_test =train_test_split(cleaned_data[["Title","Author","Description"]],cleaned_data["Genres1"],test_size=.2,random_state=42)
-#print(x_train)
-input_size = len(tok_list) #number of tokens in corpus
-hidden_size =  40
-hidden_size2 = 4
+x_train, x_test, y_train, y_test =train_test_split(t_vectors,y_set,test_size=.2,random_state=42)
+
+input_size = len(t_vectors[0]) #number of tokens in corpus
+hidden_size =  32
+hidden_size2 = 8
 num_classes = len(target_category) #number of distinct genres
-num_epoch = 2
+num_epoch = 4
 
-batch_size = 1
-
+batch_size = 2
 learning_rate = 0.005
 
-#Dataset
-#will add code to read in dataset here
+mnb = nb.fit(x_train, y_train)
+predictedMNB = nb.predict(x_test)
+accMNB = accuracy_score(predictedMNB, y_test)
+f1MNB = f1_score(predictedMNB, y_test, average="weighted")
+cmatrixMNB = confusion_matrix(y_test, predictedMNB)
 
-#two hidden layer NeuralNet
-class NeuralNet(nn.Module):
-    def __init__(self, input_size,hidden_size,hidden_size2,num_classes):
-        super(NeuralNet, self).__init__()
-        #hidden layer 1
-        self.l1 = nn.Linear(input_size,hidden_size)
-        #hidden layer 2
-        self.l2 = nn.Linear(hidden_size,hidden_size2)
-        #activation function
-        self.activation = nn.ReLU()
-        # output layer
-        self.l3 = nn.Linear(hidden_size2,num_classes)
-    def forward(self, x):
-        out = self.l1(x) #input -> hidden
-        out = self.activation(out) #activation on hidden
-        out=self.l2(out)
-        out=self.activation(out)
-        out = self.l3(out) # hidden -> output
-        return out
+print(f"MultinomialNB Accuracy Score: {accMNB}")
+print(f"MultinomialNB f1_score: {f1MNB}")
+print(f"MultinomialNB confusion matrix: {cmatrixMNB}")
 
-model = NeuralNet(input_size,hidden_size,hidden_size2,num_classes)
-model = model.to(device)
-# loss optimizer
-criterion =nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate)
+gnb = GaussianNB()
 
-#training loop will need to add
-train = cleaned_data[:2127]
-test =cleaned_data[2127:]
-for epoch in range(num_epoch):
-    ite = 0
-    for row in x_train.values:
-        title =row[0]
-        author = row[1]
-        description=row[2]
-        tokens = nlp(description.lower())
-        t_title = nlp(title.lower())
-        t_author= nlp(author.lower())
-        #print("Description Length: ",len(description))
-        nsw_tokens = [token.lemma_ for token in tokens if not token.text in all_stopwords]
-        #print("Description without stop words: ",len(nsw_tokens))
-        nsw_tokens = [token for token in nsw_tokens if not token in t_title.text]
-        #print("Description without title: ",len(nsw_tokens))
-        nsw_tokens = [token for token in nsw_tokens if not token in t_author.text]
-        nsw_tokens = [token for token in nsw_tokens if len(token) >= 7]
-        nsw_tokens = [token for token in nsw_tokens if not (token in sharedWords)]
-       #print("Description without Author Name: ",len(nsw_tokens))
-        in_layer = torch.zeros(input_size,dtype=torch.float32)
-        label = torch.zeros(num_classes,dtype=torch.float32).to(device)
-        for token in nsw_tokens:
-            ind = word2vec[token]
-            if not( in_layer[ind] == 1.0):
-                in_layer[ind] = 1.0;
-        in_layer=in_layer.to(device)
-        label[genre2vec[y_train.values[ite]]] = 1.0
-        outputs = model(in_layer)
-        loss = criterion(outputs,label)
-    
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        if((ite+1)%100==0):
-            print(f'epoch {epoch+1}, step {ite+1}, loss={loss.item():.4f}')
-        ite+=1
-with torch.no_grad():
-    n_correct = 0
-    n_samples = 0
-    ite = 0
-    for row in x_test.values:
-       
-        title =row[0]
-        author = row[1]
-        description=row[2]
-        tokens = nlp(description.lower())
-        t_title = nlp(title.lower())
-        t_author= nlp(author.lower())
-        #print("Description Length: ",len(description))
-        nsw_tokens = [token.lemma_ for token in tokens if not token.text in all_stopwords]
-        #print("Description without stop words: ",len(nsw_tokens))
-        nsw_tokens = [token for token in nsw_tokens if not token in t_title.text]
-        #print("Description without title: ",len(nsw_tokens))
-        nsw_tokens = [token for token in nsw_tokens if not token in t_author.text]
-        nsw_tokens = [token for token in nsw_tokens if len(token) >= 7]
-        nsw_tokens = [token for token in nsw_tokens if not (token in sharedWords)]
-       #print("Description without Author Name: ",len(nsw_tokens))
-        in_layer = torch.zeros(input_size,dtype=torch.float32)
-        label = torch.zeros(num_classes,dtype=torch.float32).to(device)
-        for token in nsw_tokens:
-            ind = word2vec[token]
-            if not( in_layer[ind] == 1.0):
-                in_layer[ind] = 1.0;
-        in_layer=in_layer.to(device)
-        label[genre2vec[y_test.values[ite]]] = 1.0
-       # print(label)
-        outputs = model(in_layer)
-        max_pos = 0;
-        max_val = -2;
-        for o in outputs:
-            if max_pos == 0:
-                max_val = o;
-            if o>max_val:
-                max_pos = o
-        prediction = torch.zeros(num_classes,dtype=torch.float32)
-        prediction[max_pos]=1.0
-        n_samples += 1
-        #print(prediction)
-        if torch.equal(prediction,label):
-            n_correct += 1
-        ite+=1
-        
-        
-   
+gnb.fit(x_train, y_train)
+predictedGNB = gnb.predict(x_test)
+accuracyGNB = accuracy_score(predictedGNB, y_test)
+f1GNB = f1_score(predictedGNB, y_test, average="weighted")
+cmatrixGNB = confusion_matrix(y_test, predictedGNB)
 
-acc = 100.0* (n_correct/n_samples)
-print(f'accuracy = {acc}')
+print(f"GaussianNB Accuracy Score: {accuracyGNB}")
+print(f"GaussianNB f1_score: {f1GNB}")
+print(f"GaussianNB confusion matrix: {cmatrixGNB}")
+
+
+
+#F1 score can be interpreted as a measure of overall model performance
+#from 0 to 1, where 1 is the best. To be more specific, F1 score can be
+# interpreted as the model's balanced ability to both capture positive
+#cases (recall) and be accurate with the cases
+#it does capture (precision).
+
+
+
+
+
