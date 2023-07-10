@@ -20,6 +20,7 @@ import os
 import shutil
 import torch.nn.functional as F
 from torch.nn.utils import prune
+import gzip,pickle
 # Get directory name
 if os.path.exists("runs/BGC"):
     shutil.rmtree("runs/BGC")
@@ -77,9 +78,12 @@ count_genre = {}
 #print(target_category)
 #cleaned_data = data[data["Genres1"].isin(target_category)]
 cleaned_data=data[["Title","Author","Description","Genres1"]]
-cleaned_data = cleaned_data[cleaned_data.Genres1.isin(['Fiction','Nonfiction'])]
+#cleaned_data = cleaned_data[cleaned_data.Genres1.isin(['Fiction','Nonfiction','Fantasy'])]
+cleaned_data=cleaned_data[cleaned_data.Genres1.isin(['Fantasy','Historical Fiction','Classics','Young Adult','Mystery','Romance','Science Fiction','History','Thriller','Horror','Self Help'])]
+cleaned_data=cleaned_data.groupby("Genres1").head(120)
 #cleaned_data = cleaned_data[:660]
-target_category=['Fiction','Nonfiction']
+#target_category=['Fiction','Nonfiction','Fantasy']
+target_category=['Fantasy','Historical Fiction','Classics','Young Adult','Mystery','Romance','Science Fiction','History','Thriller','Horror','Self Help']
 print(len(cleaned_data))
 #cleaned_data=cleaned_data[:200]
 #Description Vectorization
@@ -131,16 +135,17 @@ for index,row in cleaned_data.iterrows():
 
             print(index,"Titles processed")
 #print(len(tok_list))
-#print(len(dataByClass["Fiction"]))
-#print(len(dataByClass["Nonfiction"]))
-sharedWords=[tok for tok in dataByClass["Fiction"] if tok  in dataByClass["Nonfiction"]]
+
+#sharedWords=[tok for tok in dataByClass["Fiction"] if (tok in dataByClass["Nonfiction"] or tok in dataByClass["Fantasy"])]
 i = 0
 for doc in docs:
     i += 1
-    doc = [tok.text for tok in nlp(doc) if not tok.text in sharedWords]
+    doc = [tok.text for tok in nlp(doc)]
     if (i%100==0):
         print(doc)
 t_vectors=tfidf.fit_transform(docs)
+with gzip.open('10description_vectors.pkl', 'wb') as f:
+    pickle.dump(tfidf, f)
 t_vectors = torch.tensor(t_vectors.toarray(),dtype=torch.float32)
 print(t_vectors.shape)
 #print(f"Total variance explained: {np.sum(svd.explained_variance_ratio_):.2f}")
@@ -155,25 +160,22 @@ for g in target_category:
 y_set =torch.zeros([len(y)],dtype=torch.long)
 l=0
 for g in y:
-    if g == "Fiction":
-        y_set[l]=0
-    else:
-        y_set[l]=1
+    y_set[l]=genre2vec[g]
     l+=1
-#device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = torch.device('cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#device = torch.device('cpu')
 
 #hyperparameters
 x_train, x_test, y_train, y_test =train_test_split(t_vectors,y_set,test_size=.2,random_state=42)
 
 #print(x_train)
 input_size = len(t_vectors[0]) #number of tokens in corpus
-hidden_size =  32
-hidden_size2 = 8
+hidden_size =  100
+hidden_size2 = 155
 num_classes = len(target_category) #number of distinct genres
 num_epoch = 4
 
-batch_size = 2
+batch_size = 10
 
 learning_rate = 0.005
 
@@ -274,15 +276,18 @@ for epoch in range(num_epoch):
         #print("label: ",label)
            # print(running_correct)
         
-        if((i+1)%50==0):
+        if((i+1)%10==0):
             print(f'epoch {epoch+1}/{num_epoch}, step {i+1}/{n_total_steps}, loss={loss.item():.4f}')
             writer.add_scalar('training loss', running_loss/10, (epoch*n_total_steps)+1+i)
             writer.add_scalar('accuracy', running_correct/10, (epoch*n_total_steps)+1+i)
+            print(target_category[labels[-1].item()])
+            print(target_category[predictions[-1].item()])
             running_loss=0.0
             running_correct=0.0
         ite+=1
 labels = []
 preds =[]
+confusion_matrix = torch.zeros(num_classes, num_classes)
 with torch.no_grad():
     n_correct = 0
     n_samples = 0
@@ -300,12 +305,16 @@ with torch.no_grad():
         preds.append(class_predictions)
         labels.append(labels1)
         ite+=1
+        for clss, prd in zip(labels1,predictions):
+            confusion_matrix[clss.long(), prd.long()] += 1
     preds = torch.cat([torch.stack(batch) for batch in preds])
     labels = torch.cat(labels)
-        
+      
 acc = 100.0* (n_correct/n_samples)
 print(f'accuracy = {acc}')
-classes = range(2)
+print(confusion_matrix)
+torch.save(model,"NN10.pt")
+classes = range(len(target_category))
 for i in classes:
     labels_i = labels==i
     preds_i = preds[:, i]
