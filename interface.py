@@ -79,7 +79,7 @@ class BookGUI:
 
         self.root = tk.Tk()
         self.root.title("Book Genre Classifier")
-        self.root.geometry("700x460")
+        self.root.geometry("800x534")
         self.background=tk.PhotoImage(file="books_pic.png")
         self.background_label = tk.Label(self.root, image=self.background)
         self.background_label.place(x=0, y=0)
