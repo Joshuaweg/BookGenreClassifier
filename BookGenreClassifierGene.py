@@ -78,12 +78,12 @@ count_genre = {}
 #print(target_category)
 #cleaned_data = data[data["Genres1"].isin(target_category)]
 cleaned_data=data[["Title","Author","Description","Genres1"]]
-#cleaned_data = cleaned_data[cleaned_data.Genres1.isin(['Fiction','Nonfiction','Fantasy'])]
-cleaned_data=cleaned_data[cleaned_data.Genres1.isin(['Fantasy','Historical Fiction','Classics','Young Adult','Mystery','Romance','Science Fiction','History','Thriller','Horror','Self Help'])]
-cleaned_data=cleaned_data.groupby("Genres1").head(120)
+cleaned_data = cleaned_data[cleaned_data.Genres1.isin(['Fiction','Nonfiction'])]
+#cleaned_data=cleaned_data[cleaned_data.Genres1.isin(['Fantasy','Historical Fiction','Classics','Young Adult','Mystery','Romance','Science Fiction','History','Thriller','Horror','Self Help'])]
+#cleaned_data=cleaned_data.groupby("Genres1").head(120)
 #cleaned_data = cleaned_data[:660]
-#target_category=['Fiction','Nonfiction','Fantasy']
-target_category=['Fantasy','Historical Fiction','Classics','Young Adult','Mystery','Romance','Science Fiction','History','Thriller','Horror','Self Help']
+target_category=['Fiction','Nonfiction']
+#target_category=['Fantasy','Historical Fiction','Classics','Young Adult','Mystery','Romance','Science Fiction','History','Thriller','Horror','Self Help']
 print(len(cleaned_data))
 #cleaned_data=cleaned_data[:200]
 #Description Vectorization
@@ -144,7 +144,7 @@ for doc in docs:
     if (i%100==0):
         print(doc)
 t_vectors=tfidf.fit_transform(docs)
-with gzip.open('10description_vectors.pkl', 'wb') as f:
+with gzip.open('2description_vectorsNN.pkl', 'wb') as f:
     pickle.dump(tfidf, f)
 t_vectors = torch.tensor(t_vectors.toarray(),dtype=torch.float32)
 print(t_vectors.shape)
@@ -313,7 +313,7 @@ with torch.no_grad():
 acc = 100.0* (n_correct/n_samples)
 print(f'accuracy = {acc}')
 print(confusion_matrix)
-torch.save(model,"NN10.pt")
+torch.save(model,"NN2.pt")
 classes = range(len(target_category))
 for i in classes:
     labels_i = labels==i

@@ -140,8 +140,8 @@ for index,row in cleaned_data.iterrows():
         nsw_tokens = [token for token in nsw_tokens if not (token in t_author.text)]
         #nsw_tokens = [token for token in nsw_tokens if len(token) >= 7]
         #print("Description without Author Name: ",len(nsw_tokens))
-        if len(nsw_tokens)>300:
-            nsw_tokens = nsw_tokens[:300]
+        if len(nsw_tokens)>350:
+            nsw_tokens = nsw_tokens[:350]
         #print(nsw_tokens)
         if fant<10 and gen=="Fantasy":
             writer.add_text(title," ".join(nsw_tokens)+"---"+gen)
@@ -164,7 +164,7 @@ for index,row in cleaned_data.iterrows():
 #print(len(dataByClass["Nonfiction"]))
 #sharedWords=[tok for tok in dataByClass["Fiction"] if tok  in dataByClass["Nonfiction"]]
 t_vectors=tfidf.fit_transform(docs)
-with gzip.open('3description_vectors.pkl', 'wb') as f:
+with gzip.open('3description_vectorsRNN.pkl', 'wb') as f:
     pickle.dump(tfidf, f)
 t_vectors = torch.tensor(t_vectors.toarray(),dtype=torch.float32)
 doc_terms =[doc.split() for doc in docs]
@@ -196,7 +196,7 @@ term_document=np.array(term_document)
 print(term_document.shape)
 tsne = TSNE(n_components=1000, random_state=42,method='exact')
 gr_appr =TSNE(n_components=2, random_state=42)
-svd = TruncatedSVD(n_components=800, n_iter=1, random_state=42)
+svd = TruncatedSVD(n_components=700, n_iter=1, random_state=42)
 vecs = svd.fit_transform(np.array(term_document))
 print(vecs.shape)
 print(svd.explained_variance_ratio_.sum())
@@ -204,9 +204,7 @@ for (w,vec) in zip(text_data,vecs):
     word2vec[w]=vec
 with open("3word_embeddings.json", "w") as outfile:
     json.dump({k: v.tolist() for k, v in word2vec.items()}, outfile)
-print(word2vec)
 j = 0
-sys.exit()
 for doc in docs:
     doc2Mat.append([])
     for w in doc.split():
@@ -214,7 +212,7 @@ for doc in docs:
         #docVectors.append(word2vec[w])
     j+=1
 for mt in doc2Mat:
-    while(len(mt)<300):
+    while(len(mt)<350):
         mt.append(np.zeros(len(vecs[0]),dtype=np.float32))
 i=0
 for g in target_category:
@@ -234,14 +232,14 @@ x_train, x_test, y_train, y_test =train_test_split(doc2Mat,y_set,test_size=.2,ra
 xg_train, xg_test, yg_train, yg_test =train_test_split(t_vectors,y_set,test_size=.2,random_state=42)
 #print(x_train.shape)
 input_size = len(vecs[0]) #number of tokens in corpus
-hidden_size = 1200
+hidden_size = 2000
 num_classes = len(target_category) #number of distinct genres
-num_epoch = 8
-sequence_length = 300
+num_epoch = 10
+sequence_length = 350
 num_layers = 2
-batch_size = 10
+batch_size = 20
 
-learning_rate = 0.0001
+learning_rate = 0.00004
 
 #Dataset
 #will add code to read in dataset here
