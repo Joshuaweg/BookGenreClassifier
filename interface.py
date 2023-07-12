@@ -26,6 +26,7 @@ nlp = spacy.load('en_core_web_lg')
 all_stopwords = nlp.Defaults.stop_words
 sequence_length=350
 class NeuralNet(nn.Module):
+    """ class for feed forward neural network """
     def __init__(self, input_size,hidden_size,hidden_size2,num_classes):
         super(NeuralNet, self).__init__()
 
@@ -53,6 +54,7 @@ class NeuralNet(nn.Module):
         return out
 
 class RNN(nn.Module):
+    """ class for recurrent neural network """
     def __init__(self, input_size,hidden_size,num_layers,num_classes):
         super(RNN, self).__init__()
         self.hidden_size = hidden_size
@@ -70,6 +72,7 @@ class RNN(nn.Module):
         #print(out.shape)
         #print(out)
         return out
+""" loading models for classification"""
 RNNmodel = torch.load("RNN3.pt",map_location ='cpu')
 RNNmodel.eval()
 NNmodel = torch.load("NN3.pt",map_location ='cpu')
@@ -81,23 +84,24 @@ with open('NaiveBayes.pkl', 'rb') as ifp:
 with open('svm.pkl', 'rb') as ifp:
     SVMmodel = pickle.load(ifp)
 class BookGUI:
+    """ class for graphical user interface """
     def __init__(self):
 
         self.root = tk.Tk()
         self.root.title("Book Genre Classifier")
         self.root.geometry("700x460")
-        self.background=tk.PhotoImage(file="books_pic.png")
+        self.background=tk.PhotoImage(file="books_pic.png") # background image
         self.background_label = tk.Label(self.root, image=self.background)
         self.background_label.place(x=0, y=0)
         self.label = tk.Label(self.root, text="Description", font=('Arial', 18), bg="AntiqueWhite1")
         self.label.pack(padx=10, pady=10)
-        self.textbox = tk.Text(self.root, height=5, font=("Arial", 14))
+        self.textbox = tk.Text(self.root, height=5, font=("Arial", 14)) # description entry box
         self.textbox.pack(padx=20, pady=10)
         self.genre_label = tk.Label(self.root, text="Enter Genre Here:", font=("Arial", 16), bg="AntiqueWhite1")
         self.genre_label.pack(padx=10, pady=10)
         self.variable = tk.StringVar(self.root)
         self.variable.set("Fiction")
-        self.genre = tk.OptionMenu(self.root, self.variable, "Fiction", "NonFiction", "Fantasy")
+        self.genre = tk.OptionMenu(self.root, self.variable, "Fiction", "NonFiction", "Fantasy") # drop down for genres
         self.genre.config(bg="AntiqueWhite1")
         self.genre.pack(padx=10, pady=10)
         self.model_var = tk.IntVar()
@@ -114,6 +118,7 @@ class BookGUI:
         self.root.mainloop()
 
     def get_classNN(self):
+        """ function to get classification from NN """
         with gzip.open('3description_vectorsNN.pkl', 'rb') as ifp:
             tfidf = pickle.load(ifp)
         description = self.textbox.get('1.0', tk.END)
@@ -133,7 +138,9 @@ class BookGUI:
             messagebox.showinfo(title="results", message="Prediction:"+result+"\nActual:"+option+"\nMatch")
         else:
             messagebox.showinfo(title="results", message="Prediction:"+result+"\nActual:"+option+"\nNo Match")
+
     def get_model(self):
+        """ funtion to get the model user wants to use """
         model_to_use = self.model_var.get()
         if model_to_use == 1:
             self.get_classNN()
@@ -143,7 +150,9 @@ class BookGUI:
             self.get_classNB()
         elif model_to_use == 4:
             self.get_classSVM()
+
     def get_classRNN(self):
+        """ function to get RNN classification"""
         word_3 =None
         with open("3word_embeddings.json") as json_file:
             word_3 = json.load(json_file)
@@ -173,7 +182,9 @@ class BookGUI:
             messagebox.showinfo(title="results", message="Prediction:"+result+"\nActual:"+option+"\nMatch")
         else:
             messagebox.showinfo(title="results", message="Prediction:"+result+"\nActual:"+option+"\nNo Match")
+
     def get_classNB(self):
+        """function to get naive bayes classification """
         with gzip.open('NBdescription_vectors.pkl', 'rb') as ifp:
             tfidf = pickle.load(ifp)
         description = self.textbox.get('1.0', tk.END)
@@ -191,7 +202,9 @@ class BookGUI:
             messagebox.showinfo(title="results", message="Prediction:"+result+"\nActual:"+option+"\nMatch")
         else:
             messagebox.showinfo(title="results", message="Prediction:"+result+"\nActual:"+option+"\nNo Match")
+
     def get_classSVM(self):
+        """ function to get classification from support vector machine"""
         with open('SVM_vectorizer.pkl', 'rb') as ifp:
             tfidf = pickle.load(ifp)
         description = self.textbox.get('1.0', tk.END)
@@ -209,11 +222,6 @@ class BookGUI:
             messagebox.showinfo(title="results", message="Prediction:"+result+"\nActual:"+option+"\nMatch")
         else:
             messagebox.showinfo(title="results", message="Prediction:"+result+"\nActual:"+option+"\nNo Match")
-
-
-
-
-
 
 
 BookGUI()
