@@ -49,38 +49,7 @@ target_category=[]
 genres = []
 count_genre = {}
 
-#for g in data["Genres1"].values:
-#    if not g in genres:
-#        genres.append(g)
-#        count_genre[g] = 0
-#        #print(g)
-#    count_genre[g]+=1
-##print(genres)
-##print(len(genres))
-#sorted_count_genre = sorted(count_genre.items(), key=lambda x:x[1])
-#mean = 0.0
-#sum = 0.0
-#for g in sorted_count_genre:
-#    sum += g[1]
-#mean = sum/len(genres)
-#variance = 0.0
-#for g in sorted_count_genre:
-#    variance += (g[1]-mean)**2
-#variance = variance/(len(genres))
-#stdev = variance**.5
-##print(mean)
-##print(stdev)
-##print(variance)
-#sorted_count_genre = [g for g in sorted_count_genre if g[1]>=mean]
 
-##print(sorted_count_genre)
-##print(len(sorted_count_genre))
-#sum = 0
-#target_category = []
-#for g in sorted_count_genre:
-#    target_category.append(g[0])
-#print(target_category)
-#cleaned_data = data[data["Genres1"].isin(target_category)]
 cleaned_data=data[["Title","Author","Description","Genres1"]]
 cleaned_data = cleaned_data[cleaned_data.Genres1.isin(['Fiction','Nonfiction'])]
 #cleaned_data=cleaned_data[cleaned_data.Genres1.isin(['Fantasy','Historical Fiction','Classics','Young Adult','Mystery','Romance','Science Fiction','History','Thriller','Horror','Self Help'])]
@@ -108,6 +77,7 @@ y = []
 for c in target_category:
     dataByClass[c]=[]
 r = 0
+# cleaning up data and getting relevent words from description
 for index,row in cleaned_data.iterrows():
     title =row["Title"]
     author = row["Author"]
@@ -117,15 +87,11 @@ for index,row in cleaned_data.iterrows():
     tokens = nlp(description + title + author)
     t_title = nlp(title.lower())
     t_author= nlp(author.lower())
-    #print("Description Length: ",len(description))
     if(len(tokens)<=500 and len(tokens)>110):
         y.append(gen)
         nsw_tokens = [token.lemma_ for token in tokens if not token.text in all_stopwords]
-        #print("Description without stop words: ",len(nsw_tokens))
         nsw_tokens = [token for token in nsw_tokens if not token in t_title.text]
-        #print("Description without title: ",len(nsw_tokens))
         nsw_tokens = [token for token in nsw_tokens if not (token in t_author.text)]
-        #nsw_tokens = [token for token in nsw_tokens if len(token) >= 7]
         #print("Description without Author Name: ",len(nsw_tokens))
         #if r<10:
             #print(title,"\n",gen,"\n",description)
@@ -147,6 +113,7 @@ for doc in docs:
     doc = [tok.text for tok in nlp(doc)]
     if (i%100==0):
         print(doc)
+# vectorizing descriptions
 t_vectors=tfidf.fit_transform(docs)
 with gzip.open('2description_vectorsNN.pkl', 'wb') as f:
     pickle.dump(tfidf, f)
@@ -183,13 +150,11 @@ batch_size = 10
 
 learning_rate = 0.005
 
-#Dataset
-#will add code to read in dataset here
-
 #two hidden layer NeuralNet
 
 
 class NeuralNet(nn.Module):
+    """ class for feed forward neural network """
     def __init__(self, input_size,hidden_size,hidden_size2,num_classes):
         super(NeuralNet, self).__init__()
 
@@ -256,6 +221,8 @@ test =cleaned_data[2127:]
 n_total_steps = len(train_gen)
 running_loss = 0.0
 running_correct = 0.0
+
+# training
 for epoch in range(num_epoch):
     ite = 0
     for i, (vectors,labels) in enumerate(train_gen):
@@ -292,6 +259,7 @@ for epoch in range(num_epoch):
 labels = []
 preds =[]
 confusion_matrix = torch.zeros(num_classes, num_classes)
+# testing
 with torch.no_grad():
     n_correct = 0
     n_samples = 0
@@ -313,7 +281,8 @@ with torch.no_grad():
             confusion_matrix[clss.long(), prd.long()] += 1
     preds = torch.cat([torch.stack(batch) for batch in preds])
     labels = torch.cat(labels)
-      
+
+# getting and printing accuracy
 acc = 100.0* (n_correct/n_samples)
 print(f'accuracy = {acc}')
 print(confusion_matrix)
