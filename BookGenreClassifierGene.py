@@ -1,3 +1,7 @@
+"""
+Book Genre Classifier utilizing a feed forward neural network
+with optimization of dropout and pruning
+"""
 import re
 from pandas.core.missing import clean_fill_method
 import torch
@@ -20,6 +24,7 @@ import os
 import shutil
 import torch.nn.functional as F
 from torch.nn.utils import prune
+import gzip,pickle
 # Get directory name
 if os.path.exists("runs/BGC"):
     shutil.rmtree("runs/BGC")
@@ -38,48 +43,19 @@ def NgramUnions(lst1, lst2):
 
 data = pd.read_csv("data\\genre_data.csv")
 target_category=[]
-#print(data[["Title","Author","Description","Genres1"]].head())
-#print(len(data), "Books")
+
 
 genres = []
 count_genre = {}
 
-#for g in data["Genres1"].values:
-#    if not g in genres:
-#        genres.append(g)
-#        count_genre[g] = 0
-#        #print(g)
-#    count_genre[g]+=1
-##print(genres)
-##print(len(genres))
-#sorted_count_genre = sorted(count_genre.items(), key=lambda x:x[1])
-#mean = 0.0
-#sum = 0.0
-#for g in sorted_count_genre:
-#    sum += g[1]
-#mean = sum/len(genres)
-#variance = 0.0
-#for g in sorted_count_genre:
-#    variance += (g[1]-mean)**2
-#variance = variance/(len(genres))
-#stdev = variance**.5
-##print(mean)
-##print(stdev)
-##print(variance)
-#sorted_count_genre = [g for g in sorted_count_genre if g[1]>=mean]
-
-##print(sorted_count_genre)
-##print(len(sorted_count_genre))
-#sum = 0
-#target_category = []
-#for g in sorted_count_genre:
-#    target_category.append(g[0])
-#print(target_category)
-#cleaned_data = data[data["Genres1"].isin(target_category)]
+# cleaning data
 cleaned_data=data[["Title","Author","Description","Genres1"]]
 cleaned_data = cleaned_data[cleaned_data.Genres1.isin(['Fiction','Nonfiction'])]
+#cleaned_data=cleaned_data[cleaned_data.Genres1.isin(['Fantasy','Historical Fiction','Classics','Young Adult','Mystery','Romance','Science Fiction','History','Thriller','Horror','Self Help'])]
+#cleaned_data=cleaned_data.groupby("Genres1").head(120)
 #cleaned_data = cleaned_data[:660]
 target_category=['Fiction','Nonfiction']
+#target_category=['Fantasy','Historical Fiction','Classics','Young Adult','Mystery','Romance','Science Fiction','History','Thriller','Horror','Self Help']
 print(len(cleaned_data))
 #cleaned_data=cleaned_data[:200]
 #Description Vectorization
@@ -100,6 +76,7 @@ y = []
 for c in target_category:
     dataByClass[c]=[]
 r = 0
+# cleaning up the description before vectorizing
 for index,row in cleaned_data.iterrows():
     title =row["Title"]
     author = row["Author"]
@@ -113,14 +90,9 @@ for index,row in cleaned_data.iterrows():
     if(len(tokens)<=500 and len(tokens)>110):
         y.append(gen)
         nsw_tokens = [token.lemma_ for token in tokens if not token.text in all_stopwords]
-        #print("Description without stop words: ",len(nsw_tokens))
         nsw_tokens = [token for token in nsw_tokens if not token in t_title.text]
-        #print("Description without title: ",len(nsw_tokens))
         nsw_tokens = [token for token in nsw_tokens if not (token in t_author.text)]
-        #nsw_tokens = [token for token in nsw_tokens if len(token) >= 7]
-        #print("Description without Author Name: ",len(nsw_tokens))
-        #if r<10:
-            #print(title,"\n",gen,"\n",description)
+
         docs.append(" ".join(nsw_tokens))
         if r<100:
             writer.add_text(title," ".join(nsw_tokens)+"---"+gen)
@@ -130,20 +102,18 @@ for index,row in cleaned_data.iterrows():
         if(index%1000==0):
 
             print(index,"Titles processed")
-#print(len(tok_list))
-#print(len(dataByClass["Fiction"]))
-#print(len(dataByClass["Nonfiction"]))
-sharedWords=[tok for tok in dataByClass["Fiction"] if tok  in dataByClass["Nonfiction"]]
 i = 0
+# vectorizing data
 for doc in docs:
     i += 1
-    doc = [tok.text for tok in nlp(doc) if not tok.text in sharedWords]
+    doc = [tok.text for tok in nlp(doc)]
     if (i%100==0):
         print(doc)
 t_vectors=tfidf.fit_transform(docs)
+with gzip.open('2description_vectorsNN.pkl', 'wb') as f:
+    pickle.dump(tfidf, f)
 t_vectors = torch.tensor(t_vectors.toarray(),dtype=torch.float32)
 print(t_vectors.shape)
-#print(f"Total variance explained: {np.sum(svd.explained_variance_ratio_):.2f}")
 
 
 i=0
@@ -155,35 +125,27 @@ for g in target_category:
 y_set =torch.zeros([len(y)],dtype=torch.long)
 l=0
 for g in y:
-    if g == "Fiction":
-        y_set[l]=0
-    else:
-        y_set[l]=1
+    y_set[l]=genre2vec[g]
     l+=1
-#device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = torch.device('cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 #hyperparameters
 x_train, x_test, y_train, y_test =train_test_split(t_vectors,y_set,test_size=.2,random_state=42)
 
-#print(x_train)
 input_size = len(t_vectors[0]) #number of tokens in corpus
-hidden_size =  32
-hidden_size2 = 8
+hidden_size =  100
+hidden_size2 = 155
 num_classes = len(target_category) #number of distinct genres
 num_epoch = 4
 
-batch_size = 2
+batch_size = 10
 
 learning_rate = 0.005
 
-#Dataset
-#will add code to read in dataset here
-
-#two hidden layer NeuralNet
 
 
 class NeuralNet(nn.Module):
+    """ class for feed forward neural network with 2 hidden layers"""
     def __init__(self, input_size,hidden_size,hidden_size2,num_classes):
         super(NeuralNet, self).__init__()
 
@@ -244,18 +206,16 @@ print(train_gen)
 criterion =nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate)
 writer.add_graph(model,torch.zeros(input_size).to(device))
-#training loop will need to add
 train = cleaned_data[:2127]
 test =cleaned_data[2127:]
 n_total_steps = len(train_gen)
 running_loss = 0.0
 running_correct = 0.0
+# training
 for epoch in range(num_epoch):
     ite = 0
     for i, (vectors,labels) in enumerate(train_gen):
         
-        #print(vectors.shape)
-       #print("Description without Author Name: ",len(nsw_tokens))
         vectors=vectors.to(device)
         labels=labels.to(device)
         
@@ -274,15 +234,20 @@ for epoch in range(num_epoch):
         #print("label: ",label)
            # print(running_correct)
         
-        if((i+1)%50==0):
+        # printing results
+        if((i+1)%10==0):
             print(f'epoch {epoch+1}/{num_epoch}, step {i+1}/{n_total_steps}, loss={loss.item():.4f}')
             writer.add_scalar('training loss', running_loss/10, (epoch*n_total_steps)+1+i)
             writer.add_scalar('accuracy', running_correct/10, (epoch*n_total_steps)+1+i)
+            print(target_category[labels[-1].item()])
+            print(target_category[predictions[-1].item()])
             running_loss=0.0
             running_correct=0.0
         ite+=1
 labels = []
 preds =[]
+confusion_matrix = torch.zeros(num_classes, num_classes)
+# testing
 with torch.no_grad():
     n_correct = 0
     n_samples = 0
@@ -300,12 +265,17 @@ with torch.no_grad():
         preds.append(class_predictions)
         labels.append(labels1)
         ite+=1
+        for clss, prd in zip(labels1,predictions):
+            confusion_matrix[clss.long(), prd.long()] += 1
     preds = torch.cat([torch.stack(batch) for batch in preds])
     labels = torch.cat(labels)
-        
+
+# getting and showing accuracy 
 acc = 100.0* (n_correct/n_samples)
 print(f'accuracy = {acc}')
-classes = range(2)
+print(confusion_matrix)
+torch.save(model,"NN2.pt")
+classes = range(len(target_category))
 for i in classes:
     labels_i = labels==i
     preds_i = preds[:, i]
