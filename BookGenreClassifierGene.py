@@ -1,3 +1,7 @@
+"""
+Program to classify book genres with a feedforward neural network
+Takes in data from good reads dataset
+"""
 import re
 from pandas.core.missing import clean_fill_method
 import torch
