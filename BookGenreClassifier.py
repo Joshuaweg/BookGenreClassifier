@@ -149,7 +149,10 @@ for g in target_category:
 y_set =torch.zeros([len(y)],dtype=torch.long)
 l=0
 for g in y:
-    y_set[l]=genre2vec[g]
+    if g == "Fiction":
+        y_set[l]=0
+    else:
+        y_set[l]=1
     l+=1
 #device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 device = torch.device('cpu')
