@@ -1,8 +1,10 @@
 import re
+import json
 from turtle import Vec2D
 from pandas.core.missing import clean_fill_method
 from mpl_toolkits import mplot3d
 import torch
+import pickle
 import numpy as np
 import torch.nn as nn
 import torchvision
@@ -12,7 +14,7 @@ import matplotlib.pyplot as plt
 import spacy
 import numpy as np
 import pandas as pd
-import sys
+import sys, threading, traceback
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import LabelEncoder
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -26,11 +28,12 @@ import shutil
 import torch.nn.utils.prune as prune
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
+import gzip
 # Get directory name
 if os.path.exists("runs/BGC-RNN3"):
     shutil.rmtree("runs/BGC-RNN3")
 writer = SummaryWriter("runs/BGC-RNN3")
-device = torch.device('cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 tfidf = TfidfVectorizer(analyzer="word",use_idf=True,smooth_idf=True)
 def n_grams(doc, n):
@@ -87,10 +90,13 @@ count_genre = {}
 
 cleaned_data=data[["Title","Author","Description","Genres1"]]
 cleaned_data = cleaned_data[cleaned_data.Genres1.isin(['Fantasy','Fiction','Nonfiction'])]
+#cleaned_data=cleaned_data[cleaned_data.Genres1.isin(['Fantasy','Historical Fiction','Classics','Young Adult','Mystery','Romance','Science Fiction','History','Thriller','Horror','Self Help'])]
+#cleaned_data=cleaned_data.groupby("Genres1").head(120)
 r_labels= cleaned_data[["Genres1"]]
 #cleaned_data = cleaned_data[:32]
 target_category=['Fantasy','Fiction','Nonfiction']
-r_labels= cleaned_data[["Genres1"]]
+#target_category=['Fantasy','Historical Fiction','Classics','Young Adult','Mystery','Romance','Science Fiction','History','Thriller','Horror','Self Help']
+#r_labels= cleaned_data[["Genres1"]]
 #cleaned_data = cleaned_data[:660]
 #cleaned_data=cleaned_data[:4]
 print(len(cleaned_data))
@@ -125,17 +131,17 @@ for index,row in cleaned_data.iterrows():
     t_title = nlp(title.lower())
     t_author= nlp(author.lower())
     #print("Description Length: ",len(description))
-    if(len(tokens)<=500 and len(tokens)>83):
+    if(len(tokens)<=1000 and len(tokens)>1):
         y.append(gen)
-        nsw_tokens = [token.lemma_ for token in tokens if not token.text in all_stopwords]
+        nsw_tokens = [token.lemma_ for token in tokens if not token.text in all_stopwords and not token.is_punct and not token.is_digit and not token.pos_ == "PROPN"]
         #print("Description without stop words: ",len(nsw_tokens))
         nsw_tokens = [token for token in nsw_tokens if not token in t_title.text]
         #print("Description without title: ",len(nsw_tokens))
         nsw_tokens = [token for token in nsw_tokens if not (token in t_author.text)]
         #nsw_tokens = [token for token in nsw_tokens if len(token) >= 7]
         #print("Description without Author Name: ",len(nsw_tokens))
-        if len(nsw_tokens)>400:
-            nsw_tokens = nsw_tokens[:400]
+        if len(nsw_tokens)>350:
+            nsw_tokens = nsw_tokens[:350]
         #print(nsw_tokens)
         if fant<10 and gen=="Fantasy":
             writer.add_text(title," ".join(nsw_tokens)+"---"+gen)
@@ -158,37 +164,57 @@ for index,row in cleaned_data.iterrows():
 #print(len(dataByClass["Nonfiction"]))
 #sharedWords=[tok for tok in dataByClass["Fiction"] if tok  in dataByClass["Nonfiction"]]
 t_vectors=tfidf.fit_transform(docs)
+with gzip.open('3description_vectorsRNN.pkl', 'wb') as f:
+    pickle.dump(tfidf, f)
 t_vectors = torch.tensor(t_vectors.toarray(),dtype=torch.float32)
 doc_terms =[doc.split() for doc in docs]
 temp = []
+docVectors =[]
 word2vec ={}
 for doc in doc_terms:
     temp=temp+doc
 #print(len(temp))
 unique_terms =set(temp)
 text_data=list(unique_terms)
-
+term_document =[]
 #print(text_data)
-#print(len(text_data))
+print(len(text_data))
 label_encode = LabelEncoder()
 onehot_encoder = OneHotEncoder(sparse_output=False)
 int_enc = label_encode.fit_transform(text_data)
 int_enc =int_enc.reshape(len(int_enc),1)
 #print(int_enc)
 onehot_enc = onehot_encoder.fit_transform(int_enc)
-for (w,vec) in zip(text_data,onehot_enc):
+
+i = 0
+for t in text_data:
+    term_document.append([])
+    for doc in docs:
+        term_document[i].append(doc.count(t))
+    i+=1
+term_document=np.array(term_document)
+print(term_document.shape)
+tsne = TSNE(n_components=1000, random_state=42,method='exact')
+gr_appr =TSNE(n_components=2, random_state=42)
+svd = TruncatedSVD(n_components=700, n_iter=1, random_state=42)
+vecs = svd.fit_transform(np.array(term_document))
+print(vecs.shape)
+print(svd.explained_variance_ratio_.sum())
+for (w,vec) in zip(text_data,vecs):
     word2vec[w]=vec
+with open("3word_embeddings.json", "w") as outfile:
+    json.dump({k: v.tolist() for k, v in word2vec.items()}, outfile)
 j = 0
 for doc in docs:
     doc2Mat.append([])
     for w in doc.split():
         doc2Mat[j].append(word2vec[w])
+        #docVectors.append(word2vec[w])
     j+=1
 for mt in doc2Mat:
-    while(len(mt)<400):
-        mt.append(np.zeros(len(text_data),dtype=np.float32))
-i = 0
-tsne = TSNE(n_components=2, random_state=42)
+    while(len(mt)<350):
+        mt.append(np.zeros(len(vecs[0]),dtype=np.float32))
+i=0
 for g in target_category:
     #print(g)
     genre2vec[g]=i 
@@ -204,16 +230,16 @@ for g in y:
 #hyperparameters
 x_train, x_test, y_train, y_test =train_test_split(doc2Mat,y_set,test_size=.2,random_state=42)
 xg_train, xg_test, yg_train, yg_test =train_test_split(t_vectors,y_set,test_size=.2,random_state=42)
-#print(xg_test)
-input_size = len(onehot_enc[0]) #number of tokens in corpus
-hidden_size = 100
+#print(x_train.shape)
+input_size = len(vecs[0]) #number of tokens in corpus
+hidden_size = 2000
 num_classes = len(target_category) #number of distinct genres
-num_epoch = 4
-sequence_length = 400
+num_epoch = 10
+sequence_length = 350
 num_layers = 2
-batch_size = 10
+batch_size = 20
 
-learning_rate = 0.001
+learning_rate = 0.00004
 
 #Dataset
 #will add code to read in dataset here
@@ -263,22 +289,21 @@ train_gen = DataLoader(dataset=ds,batch_size=batch_size,shuffle=True)
 test_ds =Texts(x_test,y_test, transform=transforms.ToTensor())
 test_gen = DataLoader(dataset=test_ds,batch_size=batch_size,shuffle=False)
 model = RNN(input_size,hidden_size,num_layers,num_classes)
-#print(hidden_tensor.shape)
 criterion = nn.CrossEntropyLoss()
 #torch.autograd.set_detect_anomaly(True)
 optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate)
-writer.add_graph(model,torch.zeros([batch_size,sequence_length,input_size]).to(device))
+writer.add_graph(model.to(device),torch.zeros([batch_size,sequence_length,input_size]).to(device))
 model = model.to(device)
 current_loss = 0
 running_correct = 0
 all_losses=[]
-plot_steps, print_steps = 10,10
+plot_steps, print_steps = 5,5
 n_iters = 10
 n_total_steps = len(train_gen)
+end_train = False
 for epoch in range(num_epoch):
     j = 0
     for i, (des,cat) in enumerate(train_gen):
-        #print(des.shape)
         #des = pad_sequence(des, batch_first=True, padding_value=0)
         #des=pad_sequence(des)
         des = des.squeeze(1)
@@ -297,20 +322,24 @@ for epoch in range(num_epoch):
         current_loss+=loss.item()
         _, predictions = torch.max(output, 1)
         running_correct +=(predictions == cat).sum().item()
-
         if (i+1)%plot_steps == 0:
-            writer.add_scalar('training loss', current_loss/(plot_steps*batch_size), (epoch*n_total_steps)+1+i)
-            writer.add_scalar('accuracy', running_correct/(plot_steps*batch_size), (epoch*n_total_steps)+1+i)
+            writer.add_scalar('training loss', current_loss/(plot_steps), (epoch*n_total_steps)+1+i)
+            writer.add_scalar('accuracy', running_correct/(plot_steps), (epoch*n_total_steps)+1+i)
             current_loss = 0.0
             running_correct=0.0
+        if end_train:
+            break
         if(i+1)%print_steps == 0:
             guess = category_from_output(output[-1])
             #print(cat[-1].item())
             correct= "CORRECT" if guess == vec2genre[cat[-1].item()] else f"WRONG ({vec2genre[cat[-1].item()]})"
-            print(f"{i+1} {epoch} {loss:.4f} / {guess} {correct}")
+            print(f"{i+1} {epoch+1} {loss:.4f} / {guess} {correct}")
+    if end_train:
+        break
 labels = []
 preds =[]
 r_preds=[]
+confusion_matrix = torch.zeros(num_classes, num_classes)
 with torch.no_grad():
     n_correct = 0
     n_samples = 0
@@ -324,6 +353,8 @@ with torch.no_grad():
         n_samples += cat1.shape[0]
         n_correct += (predictions == cat1).sum().item()
         class_predictions = [F.softmax(output,dim=0) for output in outputs]
+        for clss, prd in zip(cat1,predictions):
+            confusion_matrix[clss.long(), prd.long()] += 1
         #print(class_predictions)
         r_preds.append(predictions)
         preds.append(class_predictions)
@@ -332,29 +363,34 @@ with torch.no_grad():
     r_preds=torch.cat(r_preds)
     preds = torch.cat([torch.stack(batch) for batch in preds])
     labels = torch.cat(labels)
+torch.save(model,"RNN3.pt")
+
+#loading pytorch models
+# model = torch.load("RNN3.pt")
+#model.eval()
 acc = 100.0* (n_correct/n_samples)
 print(f'accuracy = {acc}')
+print(confusion_matrix)
 classes = range(len(target_category))
 for i in classes:
     labels_i = labels==i
     preds_i = preds[:, i]
     writer.add_pr_curve(str(i),labels_i,preds_i,global_step=0)
 writer.close()
-Y_Real = tsne.fit_transform(xg_test)
-#sys.exit()
+Y_Real = gr_appr.fit_transform(xg_test)
 fig, (axs1,axs2) = plt.subplots(1,2)
-scat1=axs1.scatter(Y_Real[:,0],Y_Real[:,1], c=labels,cmap="Paired")
+scat1=axs1.scatter(Y_Real[:,0],Y_Real[:,1], c=labels.cpu(),cmap="Paired")
 axs1.legend(handles=scat1.legend_elements()[0],
                     loc="lower left", title="Genres",labels=target_category)
 axs1.set_title("Actual")
-scat2=axs2.scatter(Y_Real[:,0],Y_Real[:,1], c=r_preds,cmap="Paired")
+scat2=axs2.scatter(Y_Real[:,0],Y_Real[:,1], c=r_preds.cpu(),cmap="Paired")
 axs2.legend(handles=scat2.legend_elements()[0],
                     loc="lower left", title="Genres",labels=target_category)
 axs2.set_title("Predicted")
 plt.show()
-#classes = range(len(target_category))
-#for i in classes:
-#    labels_i = labels==i
-#    preds_i = preds[:, i]
-#    writer.add_pr_curve(str(i),labels_i,preds_i,global_step=0)
-#writer.close()
+classes = range(len(target_category))
+for i in classes:
+    labels_i = labels==i
+    preds_i = preds[:, i]
+    writer.add_pr_curve(str(i),labels_i,preds_i,global_step=0)
+writer.close()

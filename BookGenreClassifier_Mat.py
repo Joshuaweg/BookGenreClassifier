@@ -21,6 +21,7 @@ import torch.nn.functional as F
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay, f1_score
 from sklearn.naive_bayes import GaussianNB
+import pickle,gzip
 
 # Get directory name
 if os.path.exists("runs/BGC"):
@@ -46,9 +47,9 @@ genres = []
 count_genre = {}
 
 cleaned_data=data[["Title","Author","Description","Genres1"]]
-cleaned_data = cleaned_data[cleaned_data.Genres1.isin(['Fiction','Nonfiction'])]
+cleaned_data = cleaned_data[cleaned_data.Genres1.isin(['Fiction','Nonfiction','Fantasy'])]
 #cleaned_data = cleaned_data[:660]
-target_category=['Fiction','Nonfiction']
+target_category=['Fiction','Nonfiction','Fantasy']
 print(len(cleaned_data))
 #cleaned_data=cleaned_data[:200]
 #Description Vectorization
@@ -80,15 +81,15 @@ for index,row in cleaned_data.iterrows():
     tokens = nlp(description.lower())
     t_title = nlp(title.lower())
     t_author= nlp(author.lower())
-    if(len(tokens)<=500 and len(tokens)>110):
+    if(len(tokens)<=483 and len(tokens)>86):
         y.append(gen)
         nsw_tokens = [token.lemma_ for token in tokens if not token.text in all_stopwords]
         nsw_tokens = [token for token in nsw_tokens if not token in t_title.text]
         nsw_tokens = [token for token in nsw_tokens if not (token in t_author.text)]
         if r<10:
-            print(title,"\n",gen,"\n",description)
+            print(title,"\n",gen,"\n",description.lower())
         docs.append(" ".join(nsw_tokens))
-        if r<100:
+        if r<10:
             writer.add_text(title," ".join(nsw_tokens)+"---"+gen)
             r+=1
         tok_list = Union(tok_list,nsw_tokens)
@@ -96,7 +97,7 @@ for index,row in cleaned_data.iterrows():
         if(index%1000==0):
             print(index,"Titles processed")
 
-sharedWords=[tok for tok in dataByClass["Fiction"] if tok  in dataByClass["Nonfiction"]]
+sharedWords=[tok for tok in dataByClass["Fiction"] if (tok in dataByClass["Nonfiction"] and tok in dataByClass["Fantasy"])]
 for doc in docs:
     doc = [tok.text for tok in nlp(doc) if not tok.text in sharedWords]
 
@@ -108,13 +109,12 @@ for g in target_category:
 y_set =torch.zeros([len(y)],dtype=torch.long)
 l=0
 for g in y:
-    if g == "Fiction":
-        y_set[l]=0
-    else:
-        y_set[l]=1
+    y_set[l]=genre2vec[g]
     l+=1
 
 t_vectors=tfidf.fit_transform(docs)
+with gzip.open('NBdescription_vectors.pkl', 'wb') as f:
+    pickle.dump(tfidf, f)
 t_vectors = torch.tensor(t_vectors.toarray(),dtype=torch.float32)
 
 #hyperparameters
@@ -135,20 +135,22 @@ accMNB = accuracy_score(predictedMNB, y_test)
 f1MNB = f1_score(predictedMNB, y_test, average="weighted")
 cmatrixMNB = confusion_matrix(y_test, predictedMNB)
 
-print(f"MultinomialNB Accuracy Score: {accMNB}")
-print(f"MultinomialNB f1_score: {f1MNB}")
+print(f"MultinomialNB Accuracy Score: {accMNB*100}")
+print(f"MultinomialNB f1_score: {f1MNB*100}")
 print(f"MultinomialNB confusion matrix: {cmatrixMNB}")
 
 gnb = GaussianNB()
 
 gnb.fit(x_train, y_train)
+filename = 'NaiveBayes.pkl'
+pickle.dump(gnb, open(filename, 'wb'))
 predictedGNB = gnb.predict(x_test)
 accuracyGNB = accuracy_score(predictedGNB, y_test)
 f1GNB = f1_score(predictedGNB, y_test, average="weighted")
 cmatrixGNB = confusion_matrix(y_test, predictedGNB)
 
-print(f"GaussianNB Accuracy Score: {accuracyGNB}")
-print(f"GaussianNB f1_score: {f1GNB}")
+print(f"GaussianNB Accuracy Score: {accuracyGNB*100}")
+print(f"GaussianNB f1_score: {f1GNB*100}")
 print(f"GaussianNB confusion matrix: {cmatrixGNB}")
 
 
