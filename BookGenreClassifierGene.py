@@ -229,11 +229,6 @@ for epoch in range(num_epoch):
         running_loss += loss.item()
         _, predictions = torch.max(outputs, 1)
         running_correct +=(predictions == labels).sum().item()
-
-        #print("Running Loss: ",running_loss)
-        #print("prediction: ",prediction)
-        #print("label: ",label)
-           # print(running_correct)
         
         # printing results
         if((i+1)%10==0):

@@ -129,17 +129,19 @@ class BookGUI:
         nsw_tokens = [token.lemma_ for token in tokens if not token.text in all_stopwords]
         d_vectors=tfidf.transform([" ".join(nsw_tokens)])
         d_vectors = torch.tensor(d_vectors.toarray(),dtype=torch.float32)
-        output = NNmodel(d_vectors);
+        output = NNmodel(d_vectors)
         print(output)
         _, predictions = torch.max(output, 1)
         #print(predictions)
         print(cat_3[predictions.item()])
         result = cat_3[predictions.item()]
         option = self.variable.get()
+        # window to show results
         if result == option:
             messagebox.showinfo(title="results", message="Prediction:"+result+"\nActual:"+option+"\nMatch")
         else:
             messagebox.showinfo(title="results", message="Prediction:"+result+"\nActual:"+option+"\nNo Match")
+
     def get_model(self):
         """ funtion to get the model user wants to use """
         model_to_use = self.model_var.get()
@@ -151,6 +153,7 @@ class BookGUI:
             self.get_classNB()
         elif model_to_use == 4:
             self.get_classSVM()
+
     def get_classRNN(self):
         """ function to get RNN classification"""
         word_3 =None
@@ -178,10 +181,12 @@ class BookGUI:
         print(rcat_3[predictions.item()])
         result = rcat_3[predictions.item()]
         option = self.variable.get()
+        # window to show results
         if result == option:
             messagebox.showinfo(title="results", message="Prediction:"+result+"\nActual:"+option+"\nMatch")
         else:
             messagebox.showinfo(title="results", message="Prediction:"+result+"\nActual:"+option+"\nNo Match")
+
     def get_classNB(self):
         """function to get naive bayes classification """
         with gzip.open('NBdescription_vectors.pkl', 'rb') as ifp:
@@ -197,10 +202,12 @@ class BookGUI:
         print(cat_3[output[0]])
         result = cat_3[output[0]]
         option = self.variable.get()
+        #window to show results
         if result == option:
             messagebox.showinfo(title="results", message="Prediction:"+result+"\nActual:"+option+"\nMatch")
         else:
             messagebox.showinfo(title="results", message="Prediction:"+result+"\nActual:"+option+"\nNo Match")
+
     def get_classSVM(self):
         """ function to get classification from support vector machine"""
         with open('SVM_vectorizer.pkl', 'rb') as ifp:
@@ -216,6 +223,7 @@ class BookGUI:
         print(cat_3[output[0]])
         result = cat_3[output[0]]
         option = self.variable.get()
+        # window to show results
         if result == option:
             messagebox.showinfo(title="results", message="Prediction:"+result+"\nActual:"+option+"\nMatch")
         else:
