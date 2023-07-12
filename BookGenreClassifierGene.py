@@ -197,6 +197,7 @@ model = model.to(device)
 # Global Pruning 
 parameters = ((model.l1, "weight"), (model.l2, "weight"))
 prune.global_unstructured(parameters, pruning_method=prune.L1Unstructured, amount=3)
+
 ds = Texts(x_train,y_train, transform=transforms.ToTensor())
 test_ds =Texts(x_test,y_test, transform=transforms.ToTensor())
 train_gen = DataLoader(dataset=ds,batch_size=batch_size,shuffle=True)

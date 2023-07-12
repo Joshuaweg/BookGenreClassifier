@@ -54,7 +54,7 @@ class NeuralNet(nn.Module):
         return out
 
 class RNN(nn.Module):
-    """ class for recurant neural network """
+    """ class for recurrent neural network """
     def __init__(self, input_size,hidden_size,num_layers,num_classes):
         super(RNN, self).__init__()
         self.hidden_size = hidden_size
@@ -73,6 +73,7 @@ class RNN(nn.Module):
         #print(out)
         return out
 
+""" loading models for classification"""
 RNNmodel = torch.load("RNN3.pt",map_location ='cpu')
 RNNmodel.eval()
 NNmodel = torch.load("NN3.pt",map_location ='cpu')
@@ -83,6 +84,7 @@ with open('NaiveBayes.pkl', 'rb') as ifp:
     NBmodel = pickle.load(ifp)
 with open('svm.pkl', 'rb') as ifp:
     SVMmodel = pickle.load(ifp)
+
 class BookGUI:
     """ class for graphical user interface """
     def __init__(self):
