@@ -1,3 +1,8 @@
+"""
+Graphical User Interface for Book Genre Classifier
+Program allows users to enter a book description and 
+check how book will be classified from 4 different models
+"""
 import tkinter as tk
 from tkinter import messagebox
 import torch
